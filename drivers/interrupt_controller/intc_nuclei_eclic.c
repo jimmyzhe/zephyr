@@ -16,8 +16,6 @@
 #include <zephyr/sw_isr_table.h>
 #include <zephyr/drivers/interrupt_controller/riscv_clic.h>
 
-#define DT_DRV_COMPAT nuclei_eclic
-
 union CLICCFG {
 	struct {
 		uint8_t _reserved0 : 1;
@@ -86,11 +84,24 @@ struct CLICCTRL {
 /** CLIC INTATTR: TRIG Mask */
 #define CLIC_INTATTR_TRIG_Msk  0x3U
 
+/* nuclei,eclic */
+#if DT_HAS_COMPAT_STATUS_OKAY(nuclei_eclic)
+#define DT_DRV_COMPAT nuclei_eclic
 #define ECLIC_CFG       (*((volatile union CLICCFG  *)(DT_REG_ADDR_BY_IDX(DT_NODELABEL(eclic), 0))))
 #define ECLIC_INFO      (*((volatile union CLICINFO *)(DT_REG_ADDR_BY_IDX(DT_NODELABEL(eclic), 1))))
 #define ECLIC_MTH       (*((volatile union CLICMTH  *)(DT_REG_ADDR_BY_IDX(DT_NODELABEL(eclic), 2))))
 #define ECLIC_CTRL      ((volatile  struct CLICCTRL *)(DT_REG_ADDR_BY_IDX(DT_NODELABEL(eclic), 3)))
 #define ECLIC_CTRL_SIZE (DT_REG_SIZE_BY_IDX(DT_NODELABEL(eclic), 3))
+/* andestech,eclic */
+#elif DT_HAS_COMPAT_STATUS_OKAY(andestech_eclic)
+#define DT_DRV_COMPAT andestech_eclic
+#define CLIC_BASE       (DT_REG_ADDR(DT_DRV_INST(0)))
+#define ECLIC_CFG       (*((volatile union CLICCFG *)(CLIC_BASE + 0x0)))
+#define ECLIC_INFO      (*((volatile union CLICINFO *)(CLIC_BASE + 0x4)))
+#define ECLIC_MTH       (*((volatile union CLICMTH *)(CLIC_BASE + 0xb)))
+#define ECLIC_CTRL      ((volatile struct CLICCTRL *)(CLIC_BASE + 0x1000))
+#define ECLIC_CTRL_SIZE (0x1000)
+#endif
 
 static uint8_t nlbits;
 static uint8_t intctlbits;
