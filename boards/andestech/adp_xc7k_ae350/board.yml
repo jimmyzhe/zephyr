@@ -3,3 +3,4 @@ board:
   vendor: andestech
   socs:
   - name: ae350
+  - name: ae350_clic
