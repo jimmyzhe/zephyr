@@ -24,6 +24,11 @@ config RISCV_SOC_INTERRUPT_INIT
 config RISCV_GP
 	default y
 
+if RISCV_HAS_PLIC
+
+config NUM_IRQS
+	default 64
+
 config 2ND_LVL_ISR_TBL_OFFSET
 	default 12
 
@@ -33,8 +38,21 @@ config 2ND_LVL_INTR_00_OFFSET
 config MAX_IRQ_PER_AGGREGATOR
 	default 52
 
+endif # RISCV_HAS_PLIC
+
+if RISCV_HAS_CLIC
+
 config NUM_IRQS
-	default 64
+	default 48
+
+config RISCV_MCAUSE_EXCEPTION_MASK
+	default 0xFFF
+
+config ARCH_IRQ_VECTOR_TABLE_ALIGN
+	default 512 if RISCV_ISA_RV64I
+	default 256
+
+endif # RISCV_HAS_CLIC
 
 choice CACHE_TYPE
 	default EXTERNAL_CACHE
