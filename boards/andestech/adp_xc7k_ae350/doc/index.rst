@@ -52,12 +52,19 @@ The ADP-XC7K AE350 platform provides following hardware components:
 Supported Features
 ==================
 
-The ``adp_xc7k/ae350`` board configuration supports the following hardware features:
+The ``adp_xc7k/ae350`` and ``adp_xc7k/ae350_clic`` integrate PLIC and Andes CLIC
+for the interrupt controller respectively. Andes CLIC is also compatible with
+the NUCLEI_ECLIC driver.
+
+The board configuration supports the following hardware features:
 
 +----------------+------------+----------------------+
 | Interface      | Controller | Driver/Component     |
 +================+============+======================+
-| PLIC           | on-chip    | interrupt_controller |
+| PLIC (ae350)   | on-chip    | interrupt_controller |
++----------------+------------+----------------------+
+| NUCLEI_ECLIC   | on-chip    | interrupt_controller |
+| (ae350_clic)   |            |                      |
 +----------------+------------+----------------------+
 | RISC-V Machine | on-chip    | timer                |
 | Timer          |            |                      |
@@ -231,6 +238,11 @@ the :ref:`hello_world` application.
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
    :board: adp_xc7k/ae350
+   :goals: build
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: adp_xc7k/ae350_clic
    :goals: build
 
 Flashing
