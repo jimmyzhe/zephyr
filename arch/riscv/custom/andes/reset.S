@@ -8,8 +8,6 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/arch/riscv/arch.h>
 
-#define PLIC_BASE_ADDR DT_REG_ADDR(DT_INST(0, sifive_plic_1_0_0))
-
 /* exports */
 GTEXT(__reset)
 
@@ -72,12 +70,6 @@ cache_enable_finish:
 #ifdef CONFIG_RISCV_CUSTOM_CSR_ANDES_VECTORED_PLIC
 	/* Enable VEC_PLIC bit for Vectored PLIC extension. */
 	csrsi NDS_MMISC_CTL, 2
-
-	/* Enabled VECTORED bit in feature enable register */
-	li t0, PLIC_BASE_ADDR
-	lw t1, 0(t0)
-	ori t1, t1, 2
-	sw t1, 0(t0)
 
 	/* Set mtvec to the generated vector table. */
 	la t0, _irq_vector_table
