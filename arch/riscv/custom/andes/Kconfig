@@ -97,13 +97,12 @@ config RISCV_CUSTOM_CSR_ANDES_VECTORED_PLIC
 	depends on !(SMP || 64BIT)
 	select GEN_IRQ_VECTOR_TABLE
 	select RISCV_SOC_CONTEXT_SAVE
-	select RISCV_SOC_HAS_CUSTOM_MCAUSE
 	help
 	  This option enables the Andes V5 Vectored PLIC extension.
-	  Note that in order to use this extension, the SOC must implement
-	  __soc_save_context and __soc_restore_context, and call
-	  andes_plic_save_context and andes_plic_restore_context from each
-	  implementation, respectively.
+	  Note that in order to use this extension, the SOC's
+	  __custom_csr_save_context/__custom_csr_restore_context
+	  implementation must be used to save and restore SoC-specific
+	  context.
 
 	  64 bit systems are not supported, because the vectored PLIC mode requires
 	  4 byte addresses per entry and the Zephyr IRQ table uses 8 byte addresses.

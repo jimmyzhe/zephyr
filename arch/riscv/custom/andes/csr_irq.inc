@@ -45,6 +45,12 @@
 	sr \reg, __soc_esf_t_ucode_OFFSET(\__soc_esf_reg)
 #endif
 
+	/*
+	 * plic_mcause is not saved here: the PLIC vector table entry
+	 * already swaps the previous value into this esf, before this
+	 * save context call runs.
+	 */
+
 	.endm
 
 	.macro  __custom_csr_restore_context __soc_esf_reg reg
@@ -56,6 +62,15 @@
 #ifdef CONFIG_RISCV_CUSTOM_CSR_ANDES_HWDSP
 	lr \reg, __soc_esf_t_ucode_OFFSET(\__soc_esf_reg)
 	csrw NDS_UCODE, \reg
+#endif
+
+#ifdef CONFIG_RISCV_CUSTOM_CSR_ANDES_VECTORED_PLIC
+	/* Restore plic_mcause to the value it had before this
+	 * interrupt overwrote it.
+	 */
+	lr \reg, __soc_esf_t_plic_mcause_OFFSET(\__soc_esf_reg)
+	la t1, plic_mcause
+	sw \reg, 0(t1)
 #endif
 
 	.endm

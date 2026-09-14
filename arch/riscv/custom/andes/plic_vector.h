@@ -7,7 +7,9 @@
 #define ZEPHYR_ARCH_RISCV_CUSTOM_ANDES_PLIC_VECTOR_H
 
 /*
- * Should be added as part of the SOC_ESF_MEMBERS definition
+ * Should be added as part of the SOC_ESF_MEMBERS definition. Holds the
+ * value plic_mcause had before this interrupt overwrote it, so it can
+ * be restored once this interrupt is done.
  */
 #define ANDES_PLIC_SOC_ESF_MEMBERS uint32_t plic_mcause
 
@@ -21,15 +23,5 @@
  */
 #define ANDES_PLIC_GEN_SOC_OFFSET_SYMS() \
 	GEN_OFFSET_SYM(soc_esf_t, plic_mcause);
-
-/*
- * Must be called from __soc_save_context implementation.
- */
-void andes_plic_save_context(void);
-
-/*
- * Must be called from __soc_restore_context implementation.
- */
-void andes_plic_restore_context(void);
 
 #endif /* ZEPHYR_ARCH_RISCV_CUSTOM_ANDES_PLIC_VECTOR_H */

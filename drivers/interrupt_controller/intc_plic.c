@@ -118,6 +118,15 @@ struct plic_data {
 static uint32_t save_irq[CONFIG_MP_MAX_NUM_CPUS];
 static const struct device *save_dev[CONFIG_MP_MAX_NUM_CPUS];
 
+#ifdef CONFIG_PLIC_SUPPORTS_VECTORED_MODE
+/*
+ * Software equivalent of the PLIC claim register for Andes vectored mode:
+ * hardware already claims the source and leaves its ID here instead of
+ * the normal claim register.
+ */
+volatile uint32_t plic_mcause;
+#endif /* CONFIG_PLIC_SUPPORTS_VECTORED_MODE */
+
 INTC_PLIC_STATIC_INLINE uint32_t local_irq_to_reg_index(uint32_t local_irq)
 {
 	return local_irq >> LOG2(PLIC_REG_SIZE);
@@ -510,7 +519,23 @@ static void plic_irq_handler(const struct device *dev)
 	const struct _isr_table_entry *ite;
 	uint32_t cpu_id = arch_curr_cpu()->id;
 	/* Get the IRQ number generating the interrupt */
+#ifdef CONFIG_PLIC_SUPPORTS_VECTORED_MODE
+	uint32_t local_irq;
+
+	if (config->irq == RISCV_IRQ_MEXT) {
+		/*
+		 * Hardware already claimed this in vectored mode; read the
+		 * recorded source ID and clear it, mimicking the claim
+		 * register's read-clears behavior.
+		 */
+		local_irq = plic_mcause;
+		plic_mcause = 0;
+	} else {
+		local_irq = sys_read32(claim_complete_addr);
+	}
+#else
 	const uint32_t local_irq = sys_read32(claim_complete_addr);
+#endif /* CONFIG_PLIC_SUPPORTS_VECTORED_MODE */
 
 #ifdef CONFIG_PLIC_SHELL_IRQ_COUNT
 	uint16_t *cpu_count = get_irq_hit_count_cpu(dev, cpu_id, local_irq);

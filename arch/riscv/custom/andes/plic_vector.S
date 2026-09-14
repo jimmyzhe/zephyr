@@ -5,22 +5,16 @@
  */
 
 #include <zephyr/arch/riscv/irq.h>
-#include <zephyr/devicetree.h>
 #include "csr_irq.inc"
 
 #define PLIC_MCAUSE_OFFSET (__struct_arch_esf_soc_context_OFFSET + \
 	__soc_esf_t_plic_mcause_OFFSET - __struct_arch_esf_SIZEOF)
 
 /* exports */
-GTEXT(rv_exception_handler)
 GTEXT(_andes_plic_isr_wrapper)
-GTEXT(__soc_read_mcause)
 /* imports */
 GTEXT(_isr_wrapper)
-GTEXT(riscv_plic_irq_complete)
-
-/* Used to record that the exception was a trap or local interrupt */
-GDATA(_trap_active)
+GDATA(plic_mcause)
 
 /*
  * Each Andes Vectored PLIC vector table entry is 4 bytes for both RV32 and RV64.
@@ -36,108 +30,19 @@ GDATA(_trap_active)
  */
 
 /*
- * These functions must be called by the SoC's implementations of
- * __soc_save_context and __soc_restore_context
- */
-GTEXT(andes_plic_save_context)
-GTEXT(andes_plic_restore_context)
-
-SECTION_FUNC(exception.other, andes_plic_save_context)
-	/*
-	 * Andes Vectored PLIC hardware automatically claims the pending
-	 * interrupt and records the source ID in mcause.
-	 *
-	 * Check if _trap_active is set
-	 */
-	la t0, _trap_active
-	lr t1, 0(t0)
-	/* Clear _trap_active */
-	sr x0, 0(t0)
-	/* If _trap_active was set before, skip mcause handling */
-	bnez t1, _soc_exception_done
-	/* Load mcause */
-	csrr t0, mcause
-	/* We need to store the exception
-	 * code in mcause as the interrupt source ID + CONFIG_2ND_LVL_ISR_TBL_OFFSET,
-	 * so that the _isr_wrapper picks the correct offset in the SW isr table.
-	 */
-	addi t0, t0, CONFIG_2ND_LVL_ISR_TBL_OFFSET
-	/* Set the INTERRUPT bit in mcause */
-	li t1, RISCV_MCAUSE_IRQ_BIT
-	or t0, t0, t1
-	/* Store to mcause */
-	csrw mcause, t0
-	/* Save mcause in case this interrupt is preempted */
-	sr t0, __soc_esf_t_plic_mcause_OFFSET(a0)
-_soc_exception_done:
-	ret
-
-SECTION_FUNC(exception.other, andes_plic_restore_context)
-	addi sp, sp, -16
-	sr ra, 0(sp)
-	/*
-	 * Load the saved mcause value. If RISCV_MCAUSE_IRQ_BIT isn't set, then
-	 * the request does not require the claim complete protocol
-	 */
-	lw a0, __soc_esf_t_plic_mcause_OFFSET(a0)
-	csrw mcause, a0
-	bgez a0, _restore_done
-
-	/*
-	 * The NCEPLIC100 handles the claim portion of the
-	 * claim/complete protocol automatically, but software
-	 * must implement the complete side.
-	 *
-	 * Construct the L2 interrupt value for riscv_plic_irq_complete
-	 */
-	li t1, CONFIG_RISCV_MCAUSE_EXCEPTION_MASK
-	and a0, a0, t1
-	/* Remove CONFIG_2ND_LVL_ISR_TBL_OFFSET */
-	addi a0, a0, -(CONFIG_2ND_LVL_ISR_TBL_OFFSET - 1)
-	slli a0, a0, CONFIG_1ST_LEVEL_INTERRUPT_BITS
-	addi a0, a0, DT_IRQN(DT_INST(0, sifive_plic_1_0_0))
-
-	call riscv_plic_irq_complete
-	/*
-	 * Per andes datasheet, this fence is required in vectored mode
-	 * to ensure that the completion message has reached PLIC
-	 * before the interrupt handler returns and reenables MIE
-	 */
-	fence io, io
-_restore_done:
-	lr ra, 0(sp)
-	addi sp, sp, 16
-	ret
-
-/*
- * This handler is installed at mtvec[0] for handling
- * exceptions and local interrupts, since they don't require special mcause
- * modification.
-*/
-SECTION_FUNC(exception.other, rv_exception_handler)
-	addi sp, sp, -16
-	sr t0, 0x00(sp)
-	sr t1, 0x08(sp)
-	/* Set trap_active to true */
-	la t0, _trap_active
-	li t1, 1
-	sr t1, 0(t0)
-	lr t0, 0x00(sp)
-	lr t1, 0x08(sp)
-	addi sp, sp, 16
-	/* Jump to _andes_plic_isr_wrapper */
-	j _andes_plic_isr_wrapper
-
-/*
- * This handler wraps the _isr_wrapper function.
+ * This handler wraps _isr_wrapper for PLIC-sourced interrupts (mtvec[i],
+ * i >= 1). Vectored PLIC hardware claims the interrupt and leaves the
+ * source ID in mcause with no INTERRUPT bit set. Swap it into plic_mcause,
+ * then fake mcause as a standard machine external interrupt so
+ * _isr_wrapper dispatches through plic_irq_handler as usual.
  */
 SECTION_FUNC(exception.entry, _andes_plic_isr_wrapper)
+#ifdef CONFIG_USERSPACE
 	/*
 	 * Userspace handling logic should match that in the _isr_wrapper,
-	 * we need the same here since we want to save mcause to the
+	 * we need the same here since we want to save plic_mcause to the
 	 * privileged stack
 	 */
-#ifdef CONFIG_USERSPACE
 	/* retrieve address of _current_cpu preserving s0 */
 	csrrw s0, mscratch, s0
 
@@ -159,15 +64,22 @@ SECTION_FUNC(exception.entry, _andes_plic_isr_wrapper)
 	 * can't overflow the privileged stack. The esf will be allocated
 	 * later but it is safe to store our saved user sp here. */
 	sr t0, (-__struct_arch_esf_SIZEOF + __struct_arch_esf_sp_OFFSET)(sp)
-	/* Store mcause */
-	csrr t1, mcause
-	sr t1, PLIC_MCAUSE_OFFSET(sp)
-	/* Restore original user stack pointer */
-	mv sp, t0
 1:
-	/* Store mcause */
+	/* t0/t1 are free here; sp is the privileged stack either way.
+	 * Swap the source ID into plic_mcause.
+	 */
 	csrr t1, mcause
-	sr t1, PLIC_MCAUSE_OFFSET(sp)
+	la t0, plic_mcause
+	lw t0, 0(t0)
+	sr t0, PLIC_MCAUSE_OFFSET(sp)
+	la t0, plic_mcause
+	sw t1, 0(t0)
+
+	/* Fake mcause as a machine external interrupt so _isr_wrapper
+	 * dispatches it normally.
+	 */
+	li t1, RISCV_MCAUSE_IRQ_BIT | RISCV_IRQ_MEXT
+	csrw mcause, t1
 
 	/* retrieve original t0/t1 values */
 	lr t0, _curr_cpu_arch_user_exc_tmp0(s0)
@@ -175,29 +87,30 @@ SECTION_FUNC(exception.entry, _andes_plic_isr_wrapper)
 
 	/* retrieve original s0 and restore _current_cpu in mscratch */
 	csrrw s0, mscratch, s0
-	/* Preserve t1 */
-	csrrw t1, mscratch, t1
 #else /* !CONFIG_USERSPACE */
-	/* Save mcause before it is clobbered by _isr_wrapper's own handling */
-	/* Preserve t1 */
-	csrrw t1, mscratch, t1
+	addi sp, sp, -16
+	sr t0, 0(sp)
+	sr t1, 8(sp)
+
+	/* Swap the source ID into plic_mcause. sp is offset by the 16
+	 * bytes of scratch grabbed above, so adjust PLIC_MCAUSE_OFFSET.
+	 */
 	csrr t1, mcause
-	sr t1, PLIC_MCAUSE_OFFSET(sp)
+	la t0, plic_mcause
+	lw t0, 0(t0)
+	sr t0, (PLIC_MCAUSE_OFFSET + 16)(sp)
+	la t0, plic_mcause
+	sw t1, 0(t0)
+
+	/* Fake mcause as a machine external interrupt so _isr_wrapper
+	 * dispatches it normally.
+	 */
+	li t1, RISCV_MCAUSE_IRQ_BIT | RISCV_IRQ_MEXT
+	csrw mcause, t1
+
+	lr t0, 0(sp)
+	lr t1, 8(sp)
+	addi sp, sp, 16
 #endif
-	/* Restore t1 */
-	csrrw t1, mscratch, t1
 	/* Jump to ISR wrapper */
 	j _isr_wrapper
-
-SECTION_FUNC(exception.other, __soc_read_mcause)
-	/* Check the stack pointer to see if we are on thread or ISR stack */
-	mv t1, sp
-	lr t0, ___cpu_t_irq_stack_OFFSET(s0)
-	addi t0, t0, -16
-	bne t0, t1, 1f
-	/* We weren't on thread stack. Load thread sp to t1 */
-	lr t1, 0(t0)
-1:
-	/* Pull mcause from the plic_mcause offset, using the thread stack pointer */
-	lr a0, (PLIC_MCAUSE_OFFSET + __struct_arch_esf_SIZEOF)(t1)
-	ret
