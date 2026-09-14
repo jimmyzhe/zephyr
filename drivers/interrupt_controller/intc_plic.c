@@ -891,6 +891,47 @@ SHELL_STATIC_SUBCMD_SET_CREATE(plic_cmds,
 SHELL_CMD_REGISTER(plic, &plic_cmds, "PLIC shell commands", NULL);
 #endif /* CONFIG_PLIC_SHELL */
 
+#ifdef CONFIG_PLIC_SUPPORTS_VECTORED_MODE
+unsigned long __soc_handle_irq(unsigned long cause)
+{
+	unsigned long mcause;
+
+	/*
+	 * This distinguishes a direct Andes PLIC vectored claim from the
+	 * indirect dispatch path by reading the live mcause CSR, so mcause
+	 * must not be updated by a nested interrupt before this read.
+	 */
+	__asm__ volatile("csrr %0, mcause" : "=r"(mcause));
+
+	/*
+	 * Vectored PLIC hardware claims interrupts without setting the
+	 * INTERRUPT bit. A set bit here means this is the indirect dispatch
+	 * path (mcause faked as a machine external interrupt), which already
+	 * completes the interrupt on its own - skip to avoid completing twice.
+	 */
+	if ((mcause & RISCV_MCAUSE_IRQ_BIT) == 0) {
+		uint32_t irq = irq_to_level_2(cause) | RISCV_IRQ_MEXT;
+		const struct device *dev = get_plic_dev_from_irq(irq);
+		mem_addr_t claim_complete_addr = get_claim_complete_addr(dev);
+
+		/*
+		 * Write to the claim/complete register to indicate to the PLIC
+		 * controller that the IRQ has been handled.
+		 */
+		sys_write32(cause, claim_complete_addr);
+
+		/*
+		 * Per the Andes datasheet, this fence is required in
+		 * vectored mode to ensure the completion message reaches
+		 * the PLIC before mret re-enables interrupts.
+		 */
+		__asm__ volatile("fence io, io");
+	}
+
+	return cause;
+}
+#endif /* CONFIG_PLIC_SUPPORTS_VECTORED_MODE */
+
 #define PLIC_MIN_IRQ_NUM(n) MIN(DT_INST_PROP(n, riscv_ndev), CONFIG_MAX_IRQ_PER_AGGREGATOR)
 
 #ifdef CONFIG_PLIC_SHELL_IRQ_COUNT

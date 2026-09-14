@@ -16,7 +16,6 @@
 
 /* exports */
 GTEXT(rv_exception_handler)
-GTEXT(__soc_handle_irq)
 GTEXT(_andes_plic_isr_wrapper)
 GTEXT(__soc_read_mcause)
 /* imports */
@@ -122,10 +121,6 @@ SECTION_FUNC(exception.other, andes_plic_restore_context)
 _restore_done:
 	lr ra, 0(sp)
 	addi sp, sp, 16
-	ret
-
-SECTION_FUNC(exception.other, __soc_handle_irq)
-	/* No-op, we handle custom IRQ logic via __soc_read_mcause */
 	ret
 
 /*
