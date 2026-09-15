@@ -11,9 +11,6 @@
 #define PLIC_MCAUSE_OFFSET (__struct_arch_esf_soc_context_OFFSET + \
 	__soc_esf_t_plic_mcause_OFFSET - __struct_arch_esf_SIZEOF)
 
-/* MTIMECMP base address from devicetree (hart 0) */
-#define MTIMECMP0  DT_REG_ADDR_BY_NAME(DT_INST(0, riscv_machine_timer), mtimecmp)
-
 /* exports */
 GTEXT(rv_exception_handler)
 GTEXT(_andes_plic_isr_wrapper)
@@ -58,13 +55,6 @@ SECTION_FUNC(exception.other, andes_plic_save_context)
 	sr x0, 0(t0)
 	/* If _trap_active was set before, skip mcause handling */
 	bnez t1, _soc_exception_done
-	/* Check mstatus.MIE. If set, we should load mcause from the stack */
-	csrr t1, mstatus
-	andi t0, t1, 0x8
-	beqz t0, 1f
-	lr t0, (PLIC_MCAUSE_OFFSET + __struct_arch_esf_SIZEOF)(sp)
-	csrw mcause, t0
-1:
 	/* Load mcause */
 	csrr t0, mcause
 	/* We need to store the exception
@@ -79,8 +69,6 @@ SECTION_FUNC(exception.other, andes_plic_save_context)
 	csrw mcause, t0
 	/* Save mcause in case this interrupt is preempted */
 	sr t0, __soc_esf_t_plic_mcause_OFFSET(a0)
-	/* Set mstatus.MIE, in case it is not already enabled */
-	csrsi mstatus, 0x8
 _soc_exception_done:
 	ret
 
@@ -94,8 +82,6 @@ SECTION_FUNC(exception.other, andes_plic_restore_context)
 	lw a0, __soc_esf_t_plic_mcause_OFFSET(a0)
 	csrw mcause, a0
 	bgez a0, _restore_done
-	/* Clear MIE bit prior to running claim complete protocol */
-	csrci mstatus, 0x8
 
 	/*
 	 * The NCEPLIC100 handles the claim portion of the
@@ -136,19 +122,6 @@ SECTION_FUNC(exception.other, rv_exception_handler)
 	la t0, _trap_active
 	li t1, 1
 	sr t1, 0(t0)
-	/*
-	 * If interrupt was from timer, push MTIMECMP far into the future.
-	 * Otherwise, the interrupt will re-assert the moment we set mstatus.MIE.
-	 * This is a bit of a hack, but it should be safe as the timer_isr will
-	 * reprogram mtimecmp to a logical value.
-	 */
-	li t0, 0x80000007
-	csrr t1, mcause
-	bne t0, t1, 1f
-	li t0, MTIMECMP0
-	li t1, -1
-	sr t1 0(t0)
-1:
 	lr t0, 0x00(sp)
 	lr t1, 0x08(sp)
 	addi sp, sp, 16
@@ -156,8 +129,7 @@ SECTION_FUNC(exception.other, rv_exception_handler)
 	j _andes_plic_isr_wrapper
 
 /*
- * This handler wraps the _isr_wrapper function, and is used to enable
- * mstatus.MIE as early as possible in order to support nested interrupts
+ * This handler wraps the _isr_wrapper function.
  */
 SECTION_FUNC(exception.entry, _andes_plic_isr_wrapper)
 	/*
@@ -206,17 +178,12 @@ SECTION_FUNC(exception.entry, _andes_plic_isr_wrapper)
 	/* Preserve t1 */
 	csrrw t1, mscratch, t1
 #else /* !CONFIG_USERSPACE */
-	/*
-	 * Before we set mstatus.MIE to enable nested interrupts we need to save
-	 * mcause, as it will be overwritten by the hardware if an interrupt fires
-	 */
+	/* Save mcause before it is clobbered by _isr_wrapper's own handling */
 	/* Preserve t1 */
 	csrrw t1, mscratch, t1
 	csrr t1, mcause
 	sr t1, PLIC_MCAUSE_OFFSET(sp)
 #endif
-	/* Set mstatus.MIE */
-	csrsi mstatus, 0x8
 	/* Restore t1 */
 	csrrw t1, mscratch, t1
 	/* Jump to ISR wrapper */
