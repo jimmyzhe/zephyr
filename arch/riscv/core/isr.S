@@ -179,7 +179,11 @@ SECTION_VAR(RODATA, riscv_irq_mask_table)
 #endif /* CONFIG_RISCV_NESTED_INTERRUPTS && !CONFIG_RISCV_HAS_CLIC */
 
 /* exports */
+#ifdef CONFIG_RISCV_CUSTOM_ISR_WRAPPER
+GTEXT(_riscv_isr_wrapper)
+#else
 GTEXT(_isr_wrapper)
+#endif /* CONFIG_RISCV_CUSTOM_ISR_WRAPPER */
 
 /* use ABI name of registers for the sake of simplicity */
 
@@ -206,7 +210,11 @@ GTEXT(_isr_wrapper)
 /*
  * Handler called upon each exception/interrupt/fault
  */
+#ifdef CONFIG_RISCV_CUSTOM_ISR_WRAPPER
+SECTION_FUNC(exception.entry, _riscv_isr_wrapper)
+#else
 SECTION_FUNC(exception.entry, _isr_wrapper)
+#endif /* CONFIG_RISCV_CUSTOM_ISR_WRAPPER */
 
 /* Provide requested alignment, which depends e.g. on MTVEC format */
 .balign CONFIG_RISCV_TRAP_HANDLER_ALIGNMENT

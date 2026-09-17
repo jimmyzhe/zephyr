@@ -198,6 +198,19 @@ config RISCV_SOC_HAS_CUSTOM_IRQ_HANDLING
 	  function __soc_handle_all_irqs has to be implemented. It shall service
 	  and clear all pending interrupts.
 
+config RISCV_CUSTOM_ISR_WRAPPER
+	bool
+	help
+	  Hidden option to let the SoC provide its own _isr_wrapper, for
+	  hardware that needs work done before the architecture entry point
+	  runs, such as fixing up a trap cause the hardware did not record in
+	  the architectural format.
+
+	  When this option is enabled, the SoC must define _isr_wrapper, and the
+	  generic RISC-V ISR wrapper is renamed _riscv_isr_wrapper. This allows
+	  the SoC _isr_wrapper to handle SoC specific work and then jump to
+	  _riscv_isr_wrapper.
+
 config RISCV_SOC_HAS_CUSTOM_IRQ_LOCK_OPS
 	bool
 	help
