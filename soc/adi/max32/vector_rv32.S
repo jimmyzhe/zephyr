@@ -11,54 +11,54 @@
 /* exports */
 GTEXT(__start)
 GTEXT(__ivt)
-GTEXT(__rv32_isr_wrapper)
+GTEXT(_isr_wrapper)
 
 /* imports */
 GTEXT(__initialize)
 #if defined(CONFIG_GEN_SW_ISR_TABLE)
-GTEXT(_isr_wrapper)
+GTEXT(_riscv_isr_wrapper)
 #endif
 
 SECTION_FUNC(vectors, __ivt)
 	.option push
 	.option norvc
 	j __start
+	j _riscv_isr_wrapper
+	j _riscv_isr_wrapper
+	j _riscv_isr_wrapper
 	j _isr_wrapper
 	j _isr_wrapper
 	j _isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
-	j __rv32_isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
+	j _isr_wrapper
 
-SECTION_FUNC(vectors, __rv32_isr_wrapper)
+SECTION_FUNC(vectors, _isr_wrapper)
 	addi sp, sp, -8
 	sw  t0, 0x00(sp)
 	sw  t1, 0x04(sp)
@@ -70,7 +70,7 @@ SECTION_FUNC(vectors, __rv32_isr_wrapper)
 	lw  t0, 0x00(sp)
 	lw  t1, 0x04(sp)
 	addi sp, sp, 8
-	j _isr_wrapper
+	j _riscv_isr_wrapper
 
 SECTION_FUNC(vectors, __start)
 #if defined(CONFIG_RISCV_GP)

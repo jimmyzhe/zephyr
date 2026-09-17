@@ -41,6 +41,9 @@ config RISCV_TRAP_HANDLER_ALIGNMENT
 config ARCH_SW_ISR_TABLE_ALIGN
 	default 32
 
+config RISCV_CUSTOM_ISR_WRAPPER
+	default y
+
 config RISCV_SOC_CONTEXT_SAVE
 	default y
 
