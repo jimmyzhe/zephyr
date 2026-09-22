@@ -14,6 +14,10 @@
 /* Exports */
 GTEXT(__soc_save_context)
 GTEXT(__soc_restore_context)
+#ifdef CONFIG_RISCV_CUSTOM_CSR_ANDES_VECTORED_PLIC
+/* Imports */
+GDATA(plic_mcause)
+#endif
 
 SECTION_FUNC(exception.other, __soc_save_context)
 
@@ -23,7 +27,7 @@ SECTION_FUNC(exception.other, __soc_save_context)
 
 SECTION_FUNC(exception.other, __soc_restore_context)
 
-	__custom_csr_restore_context a0, t0
+	__custom_csr_restore_context a0, t0, t1
 
 	ret
 
