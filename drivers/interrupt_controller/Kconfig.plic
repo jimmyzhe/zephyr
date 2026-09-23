@@ -36,6 +36,17 @@ config PLIC_SUPPORTS_VECTORED_MODE
 	help
 	  Enabled when the PLIC supports vectored mode.
 
+config PLIC_SUPPORTS_PREEMPTION
+	bool
+	default y
+	depends on DT_HAS_ANDESTECH_NCEPLIC100_ENABLED
+	depends on RISCV_NESTED_INTERRUPTS
+	help
+	  Enabled when the PLIC raises the context threshold to the claimed
+	  source's priority and restores it on completion, in hardware. The
+	  driver then leaves the threshold alone and lets the controller
+	  decide what may preempt an ISR.
+
 if PLIC_SUPPORTS_TRIG_TYPE
 
 config PLIC_TRIG_TYPE_REG_OFFSET
