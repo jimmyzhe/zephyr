@@ -12,20 +12,41 @@
 
 #ifdef CONFIG_RISCV_SOC_OFFSETS
 
+/* Andes Vectored PLIC. */
+#ifdef CONFIG_RISCV_CUSTOM_CSR_ANDES_VECTORED_PLIC
+	#define GEN_ANDES_VECTORED_PLIC_OFFSET_SYMS()	\
+		GEN_OFFSET_SYM(soc_esf_t, mcause);	\
+		GEN_OFFSET_SYM(soc_esf_t, plic_mcause);
+#else
+	#define GEN_ANDES_VECTORED_PLIC_OFFSET_SYMS()
+
+#endif
+
 /* Andes V5 specific registers. */
 #if defined(CONFIG_RISCV_CUSTOM_CSR_ANDES_PFT) && \
 	defined(CONFIG_RISCV_CUSTOM_CSR_ANDES_HWDSP)
 	#define GEN_CUSTOM_CSR_OFFSET_SYMS()		\
+		GEN_ANDES_VECTORED_PLIC_OFFSET_SYMS()	\
 		GEN_OFFSET_SYM(soc_esf_t, mxstatus);	\
 		GEN_OFFSET_SYM(soc_esf_t, ucode)
 
 #elif defined(CONFIG_RISCV_CUSTOM_CSR_ANDES_PFT)
 	#define GEN_CUSTOM_CSR_OFFSET_SYMS()		\
+		GEN_ANDES_VECTORED_PLIC_OFFSET_SYMS()	\
 		GEN_OFFSET_SYM(soc_esf_t, mxstatus)
 
 #elif defined(CONFIG_RISCV_CUSTOM_CSR_ANDES_HWDSP)
 	#define GEN_CUSTOM_CSR_OFFSET_SYMS()		\
+		GEN_ANDES_VECTORED_PLIC_OFFSET_SYMS()	\
 		GEN_OFFSET_SYM(soc_esf_t, ucode)
+
+#elif defined(CONFIG_RISCV_CUSTOM_CSR_ANDES_VECTORED_PLIC)
+	#define GEN_CUSTOM_CSR_OFFSET_SYMS()		\
+		GEN_OFFSET_SYM(soc_esf_t, mcause);	\
+		GEN_OFFSET_SYM(soc_esf_t, plic_mcause)
+
+#else
+	#define GEN_CUSTOM_CSR_OFFSET_SYMS()
 
 #endif
 
