@@ -96,6 +96,7 @@ config RISCV_CUSTOM_CSR_ANDES_VECTORED_PLIC
 	depends on CPU_HAS_ANDES_VECTORED_PLIC
 	depends on !(SMP || 64BIT)
 	select GEN_IRQ_VECTOR_TABLE
+	select RISCV_SOC_CONTEXT_SAVE if PLIC_SUPPORTS_PREEMPTIVE_PRIORITY
 	help
 	  This option enables the Andes V5 Vectored PLIC extension. This extension
 	  allows the PLIC to directly vector interrupts to their respective handlers,

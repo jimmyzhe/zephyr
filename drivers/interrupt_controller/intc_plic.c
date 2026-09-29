@@ -615,6 +615,13 @@ static void plic_irq_handler(const struct device *dev)
 	 * getting handled so that we don't miss on the next edge-triggered interrupt.
 	 */
 	if (edge) {
+#ifdef CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY
+		/*
+		 * __soc_handle_irq() may have enabled interrupts already, keep
+		 * them off until the threshold is raised again below.
+		 */
+		(void)arch_irq_lock();
+#endif /* CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY */
 		plic_irq_complete(claim_complete_addr, local_irq);
 	}
 
@@ -634,6 +641,7 @@ static void plic_irq_handler(const struct device *dev)
 		sys_write32(sys_read32(config->prio + local_irq * sizeof(uint32_t)), thres_addr);
 	}
 
+	/* A no-op where __soc_handle_irq() already enabled interrupts */
 	arch_irq_unlock(RV_STATUS_IE);
 #endif /* CONFIG_RISCV_NESTED_INTERRUPTS */
 
@@ -1004,7 +1012,14 @@ unsigned long __soc_handle_irq(unsigned long cause)
 		 * interrupts.
 		 */
 		plic_irq_complete(claim_complete_addr, cause);
-	} else {
+	}
+#ifdef CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY
+	else if ((mcause & CONFIG_RISCV_MCAUSE_EXCEPTION_MASK) == RISCV_IRQ_MEXT) {
+		/* The hardware claim has already raised the threshold */
+		arch_irq_unlock(RV_STATUS_IE);
+	}
+#endif /* CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY */
+	else {
 		/* Clear the pending bit, as the default __soc_handle_irq() does */
 		csr_clear(mip, BIT(cause));
 	}
