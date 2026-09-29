@@ -51,6 +51,16 @@
 #define PLIC_TRIG_EDGE  ((uint32_t)1)
 #endif /* CONFIG_PLIC_SUPPORTS_TRIG_TYPE */
 
+/*
+ * Andes feature enable register, at the start of the register block. Preemption
+ * makes a claim raise the context threshold to the claimed source's priority
+ * and a completion restore it; vectored mode claims in hardware and dispatches
+ * through the IRQ vector table.
+ */
+#define PLIC_FEATURE_ENABLE   0x00
+#define PLIC_FEATURE_PREEMPT  BIT(0)
+#define PLIC_FEATURE_VECTORED BIT(1)
+
 /* PLIC registers are 32-bit memory-mapped */
 #define PLIC_REG_SIZE 32
 #define PLIC_REG_MASK BIT_MASK(LOG2(PLIC_REG_SIZE))
@@ -594,26 +604,36 @@ static void plic_irq_handler(const struct device *dev)
 		z_irq_spurious(NULL);
 	}
 
+	bool edge = false;
+
 #ifdef CONFIG_PLIC_SUPPORTS_TRIG_EDGE
-	uint32_t trig_val = riscv_plic_irq_trig_val(dev, local_irq);
+	edge = (riscv_plic_irq_trig_val(dev, local_irq) == PLIC_TRIG_EDGE);
+#endif /* CONFIG_PLIC_SUPPORTS_TRIG_EDGE */
+
 	/*
 	 * Edge-triggered interrupts have to be acknowledged first before
 	 * getting handled so that we don't miss on the next edge-triggered interrupt.
 	 */
-	if (trig_val == PLIC_TRIG_EDGE) {
+	if (edge) {
 		plic_irq_complete(claim_complete_addr, local_irq);
 	}
-#endif /* CONFIG_PLIC_SUPPORTS_TRIG_EDGE */
 
 #ifdef CONFIG_RISCV_NESTED_INTERRUPTS
-	const mem_addr_t thres_addr = get_threshold_priority_addr(dev, cpu_id);
-	const uint32_t outer_thres = sys_read32(thres_addr);
-
 	/*
 	 * The PLIC only takes a source above the threshold, so raising it to
 	 * this source's priority lets only higher priority sources preempt.
+	 * With hardware preemption the claim has raised it already, unless an
+	 * edge acknowledge above dropped it again.
 	 */
-	sys_write32(sys_read32(config->prio + local_irq * sizeof(uint32_t)), thres_addr);
+	const bool set_thres = !IS_ENABLED(CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY) || edge;
+	const mem_addr_t thres_addr = get_threshold_priority_addr(dev, cpu_id);
+	uint32_t outer_thres = 0U;
+
+	if (set_thres) {
+		outer_thres = sys_read32(thres_addr);
+		sys_write32(sys_read32(config->prio + local_irq * sizeof(uint32_t)), thres_addr);
+	}
+
 	arch_irq_unlock(RV_STATUS_IE);
 #endif /* CONFIG_RISCV_NESTED_INTERRUPTS */
 
@@ -624,7 +644,9 @@ static void plic_irq_handler(const struct device *dev)
 #ifdef CONFIG_RISCV_NESTED_INTERRUPTS
 	/* Undo the above before completing, in the opposite order */
 	(void)arch_irq_lock();
-	sys_write32(outer_thres, thres_addr);
+	if (set_thres) {
+		sys_write32(outer_thres, thres_addr);
+	}
 
 	save_irq[cpu_id] = outer_irq;
 	save_dev[cpu_id] = outer_dev;
@@ -635,14 +657,9 @@ static void plic_irq_handler(const struct device *dev)
 	 * PLIC controller that the IRQ has been handled
 	 * for level triggered interrupts.
 	 */
-#ifdef CONFIG_PLIC_SUPPORTS_TRIG_EDGE
-	/* Handle only if level-triggered */
-	if (trig_val == PLIC_TRIG_LEVEL) {
+	if (!edge) {
 		plic_irq_complete(claim_complete_addr, local_irq);
 	}
-#else
-	plic_irq_complete(claim_complete_addr, local_irq);
-#endif /* #ifdef CONFIG_PLIC_SUPPORTS_TRIG_EDGE */
 }
 
 /**
@@ -681,19 +698,25 @@ static int plic_init(const struct device *dev)
 	}
 #endif
 
-#ifdef CONFIG_PLIC_SUPPORTS_VECTORED_MODE
+#if defined(CONFIG_PLIC_SUPPORTS_VECTORED_MODE) || defined(CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY)
 	/*
-	 * Vectored mode is only supported by the PLIC connected to the
-	 * machine external interrupt.
+	 * Both features only apply to the PLIC connected to the machine
+	 * external interrupt.
 	 */
 	if (config->irq == RISCV_IRQ_MEXT) {
-		/*
-		 * Enable vectored mode in the Andes PLIC Feature Enable
-		 * Register (PLIC base address + offset 0x0).
-		 */
-		sys_write32(BIT(1), config->prio);
+		uint32_t features = 0U;
+
+		if (IS_ENABLED(CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY)) {
+			features |= PLIC_FEATURE_PREEMPT;
+		}
+
+		if (IS_ENABLED(CONFIG_PLIC_SUPPORTS_VECTORED_MODE)) {
+			features |= PLIC_FEATURE_VECTORED;
+		}
+
+		sys_write32(features, config->prio + PLIC_FEATURE_ENABLE);
 	}
-#endif /* CONFIG_PLIC_SUPPORTS_VECTORED_MODE */
+#endif /* CONFIG_PLIC_SUPPORTS_VECTORED_MODE || CONFIG_PLIC_SUPPORTS_PREEMPTIVE_PRIORITY */
 
 	/* Configure IRQ for PLIC driver */
 	config->irq_config_func();
